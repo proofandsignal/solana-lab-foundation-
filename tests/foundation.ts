@@ -6,14 +6,14 @@ import { assert } from "chai";
 import { LabCore } from "../target/types/lab_core";
 import { AttestationEngine } from "../target/types/attestation_engine";
 
-async function expectFailure(fn: () => Promise<unknown>) {
-  let failed = false;
-  try {
-    await fn();
-  } catch {
-    failed = true;
-  }
-  assert.isTrue(failed, "expected transaction to fail");
+async function expectFailure(fn: () => Promise<unknown>, expected: RegExp) {
+  let error: unknown;
+  try { await fn(); } catch (caught) { error = caught; }
+  assert.isDefined(error, "expected an on-chain rejection");
+  const err = error as { message?: string; logs?: string[]; error?: { errorCode?: { code?: string } } };
+  const detail = [err.message ?? "", ...(err.logs ?? []), err.error?.errorCode?.code ?? ""].join("\n");
+  assert.notMatch(detail, /Program is not deployed|Unsupported program id/i);
+  assert.match(detail, expected, "unexpected reason for transaction rejection");
 }
 
 describe("Solana Lab Foundation v0.1 — 16 tests", () => {
@@ -70,7 +70,8 @@ describe("Solana Lab Foundation v0.1 — 16 tests", () => {
         authority: provider.wallet.publicKey,
         config: configPda,
         systemProgram: SystemProgram.programId,
-      }).rpc()
+      }).rpc(),
+      /InvalidVersion/
     );
   });
 
@@ -100,7 +101,8 @@ describe("Solana Lab Foundation v0.1 — 16 tests", () => {
         authority: provider.wallet.publicKey,
         config: configPda,
         systemProgram: SystemProgram.programId,
-      }).rpc()
+      }).rpc(),
+      /already in use|already initialized|account already exists|Allocate.*in use/i
     );
   });
 
@@ -129,7 +131,8 @@ describe("Solana Lab Foundation v0.1 — 16 tests", () => {
       core.methods.setStatus({ paused: {} }).accountsStrict({
         authority: attacker.publicKey,
         config: configPda,
-      }).signers([attacker]).rpc()
+      }).signers([attacker]).rpc(),
+      /Unauthorized|ConstraintHasOne/
     );
   });
 
@@ -149,7 +152,8 @@ describe("Solana Lab Foundation v0.1 — 16 tests", () => {
         issuer: provider.wallet.publicKey,
         attestation: attestationPda,
         systemProgram: SystemProgram.programId,
-      }).rpc()
+      }).rpc(),
+      /InvalidSchema/
     );
   });
 
@@ -164,7 +168,8 @@ describe("Solana Lab Foundation v0.1 — 16 tests", () => {
         issuer: provider.wallet.publicKey,
         attestation: attestationPda,
         systemProgram: SystemProgram.programId,
-      }).rpc()
+      }).rpc(),
+      /InvalidVersion/
     );
   });
 
@@ -180,7 +185,8 @@ describe("Solana Lab Foundation v0.1 — 16 tests", () => {
         issuer: provider.wallet.publicKey,
         attestation: zeroPda,
         systemProgram: SystemProgram.programId,
-      }).rpc()
+      }).rpc(),
+      /EmptyEvidenceHash/
     );
   });
 
@@ -213,7 +219,8 @@ describe("Solana Lab Foundation v0.1 — 16 tests", () => {
         issuer: provider.wallet.publicKey,
         attestation: attestationPda,
         systemProgram: SystemProgram.programId,
-      }).rpc()
+      }).rpc(),
+      /already in use|already initialized|account already exists|Allocate.*in use/i
     );
   });
 
@@ -222,7 +229,8 @@ describe("Solana Lab Foundation v0.1 — 16 tests", () => {
       attest.methods.revokeAttestation().accountsStrict({
         issuer: attacker.publicKey,
         attestation: attestationPda,
-      }).signers([attacker]).rpc()
+      }).signers([attacker]).rpc(),
+      /ConstraintHasOne/
     );
   });
 
