@@ -47,5 +47,19 @@ jobs:
           mkdir -p "$HOME/.config/solana"
           solana-keygen new --no-bip39-passphrase --silent --force -o "$HOME/.config/solana/id.json"
 
-      - name: Run 16 tests on local validator
-        run: anchor test --validator legacy
+      - name: Deploy programs to explicit local validator and run 16 tests
+        run: |
+          set -euo pipefail
+          solana-test-validator --reset --quiet > /tmp/solana-lab-validator.log 2>&1 &
+          VALIDATOR_PID=$!
+          trap 'kill "$VALIDATOR_PID" 2>/dev/null || true; cat /tmp/solana-lab-validator.log' EXIT
+          solana config set --url http://127.0.0.1:8899 --keypair "$HOME/.config/solana/id.json"
+          for attempt in $(seq 1 60); do
+            if solana cluster-version --url http://127.0.0.1:8899 >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          solana cluster-version --url http://127.0.0.1:8899
+          solana airdrop 100 --url http://127.0.0.1:8899
+          anchor deploy --provider.cluster localnet
+          anchor keys list
+          anchor test --skip-local-validator --skip-deploy --provider.cluster localnet
