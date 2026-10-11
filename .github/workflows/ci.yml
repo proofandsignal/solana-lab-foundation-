@@ -31,6 +31,11 @@ jobs:
       - name: Install dependencies
         run: yarn install
 
+      - name: Sync program IDs with local deploy keypairs
+        run: |
+          anchor keys sync
+          anchor keys list
+
       - name: Compile
         run: anchor build
 
