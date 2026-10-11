@@ -39,6 +39,17 @@ jobs:
       - name: Compile
         run: anchor build
 
+      - name: Validate deploy ELF binaries
+        run: |
+          set -euo pipefail
+          for program in lab_core attestation_engine; do
+            artifact="target/deploy/${program}.so"
+            test -s "$artifact"
+            file "$artifact"
+            readelf -h "$artifact"
+            readelf -h "$artifact" | grep -Eq 'Machine:.*(Linux BPF|BPF)'
+          done
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
