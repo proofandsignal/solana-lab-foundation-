@@ -37,7 +37,7 @@ jobs:
           anchor keys list
 
       - name: Compile
-        run: anchor build
+        run: anchor build --arch v2
 
       - name: Validate deploy ELF binaries
         run: |
@@ -48,6 +48,7 @@ jobs:
             file "$artifact"
             readelf -h "$artifact"
             readelf -h "$artifact" | grep -Eq 'Machine:.*(Linux BPF|BPF)'
+            readelf -h "$artifact" | grep -Eq 'Flags:.*0x2([[:space:]]|$)'
           done
 
       - name: Clippy
@@ -73,4 +74,4 @@ jobs:
           solana airdrop 100 --url http://127.0.0.1:8899
           anchor deploy --provider.cluster localnet
           anchor keys list
-          anchor test --skip-local-validator --skip-deploy --provider.cluster localnet
+          anchor test --skip-build --skip-local-validator --skip-deploy --provider.cluster localnet
