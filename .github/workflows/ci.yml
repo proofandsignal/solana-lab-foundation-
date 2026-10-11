@@ -42,32 +42,8 @@ jobs:
       - name: Validate deploy ELF binaries
         run: |
           set -euo pipefail
-          for program in lab_core attestation_engine; do
-            artifact="target/deploy/${program}.so"
-            test -s "$artifact"
-            file "$artifact"
-            readelf -h "$artifact"
-            # EM_BPF = 247 (0xF7) or Solana-specific EM_SBPF = 263 (0x107).
-            # Some binutils versions print EM_SBPF as <unknown>: 0x107.
-            python3 - "$artifact" <<'PY'
-            import struct
-            import sys
-            from pathlib import Path
-            
-            data = Path(sys.argv[1]).read_bytes()
-            if len(data) < 64 or data[:4] != b"\x7fELF":
-                raise SystemExit("Not an ELF binary")
-            if data[4] != 2 or data[5] != 1:
-                raise SystemExit("Expected 64-bit little-endian ELF")
-            machine = struct.unpack_from("<H", data, 18)[0]
-            flags = struct.unpack_from("<I", data, 48)[0]
-            if machine not in (247, 263):
-                raise SystemExit(f"Unexpected ELF machine: {machine:#x}")
-            if flags != 2:
-                raise SystemExit(f"Expected SBF v2 flags 0x2; got {flags:#x}")
-            print(f"Validated SBF v2 ELF: machine={machine:#x} flags={flags:#x}")
-            PY
-          done
+          file target/deploy/lab_core.so target/deploy/attestation_engine.so
+          python3 scripts/validate_sbf_elf.py target/deploy/lab_core.so target/deploy/attestation_engine.so
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
