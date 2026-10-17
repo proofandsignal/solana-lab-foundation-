@@ -1,0 +1,71 @@
+name: foundation-ci
+
+on:
+  push:
+    branches: [main, "foundation/**"]
+  pull_request:
+
+jobs:
+  foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Solana development toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL https://solana-install.solana.workers.dev | bash
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.avm/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Select Anchor 1.2.0
+        run: |
+          avm install 1.2.0
+          avm use 1.2.0
+          anchor --version
+          solana --version
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Sync program IDs with local deploy keypairs
+        run: |
+          anchor keys sync
+          anchor keys list
+
+      - name: Compile
+        run: anchor build --arch v2
+
+      - name: Validate deploy ELF binaries
+        run: |
+          set -euo pipefail
+          file target/deploy/lab_core.so target/deploy/attestation_engine.so
+          python3 scripts/validate_sbf_elf.py target/deploy/lab_core.so target/deploy/attestation_engine.so
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Create ephemeral CI wallet
+        run: |
+          mkdir -p "$HOME/.config/solana"
+          solana-keygen new --no-bip39-passphrase --silent --force -o "$HOME/.config/solana/id.json"
+
+      - name: Deploy programs to explicit local validator and run 16 tests
+        run: |
+          set -euo pipefail
+          solana-test-validator --reset --quiet > /tmp/solana-lab-validator.log 2>&1 &
+          VALIDATOR_PID=$!
+          trap 'kill "$VALIDATOR_PID" 2>/dev/null || true; cat /tmp/solana-lab-validator.log' EXIT
+          solana config set --url http://127.0.0.1:8899 --keypair "$HOME/.config/solana/id.json"
+          for attempt in $(seq 1 60); do
+            if solana cluster-version --url http://127.0.0.1:8899 >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          solana cluster-version --url http://127.0.0.1:8899
+          solana airdrop 100 --url http://127.0.0.1:8899
+          anchor deploy --provider.cluster localnet
+          anchor keys list
+          anchor test --skip-build --skip-local-validator --skip-deploy --provider.cluster localnet

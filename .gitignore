@@ -1,0 +1,9 @@
+.anchor/
+target/
+node_modules/
+.env
+*.log
+.DS_Store
+
+# Persistent devnet secrets — never commit
+.devnet-keys/
